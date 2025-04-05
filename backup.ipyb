@@ -1,0 +1,367 @@
+import numpy as np 
+import pandas as pd
+import random
+import torch
+import torchvision
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, transforms
+from sklearn.model_selection import KFold
+import matplotlib.pyplot as plt
+from torch.utils.data import random_split, DataLoader
+from sklearn.model_selection import StratifiedKFold
+from PIL import Image
+import torch.nn.functional as F
+from torchvision.transforms.functional import to_pil_image
+from torch.utils.data import Subset
+
+import os
+import time
+from tqdm import tqdm
+# ======================= PYTHON SETTINGS ======================= #
+# =======================   GPU or CPU    ======================= #
+# Check if GPU is available -> CUDA
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("There are %d GPU(s) available." % torch.cuda.device_count())
+    print("We will use the GPU:", torch.cuda.get_device_name(0))
+
+# Apple Silicon GPU
+if torch.backends.mps.is_available():
+    mps_device = torch.device("mps")
+    out = torch.ones(1, device=mps_device)
+    print (out)
+    print ("MPS device found. - Apple Silicon GPU")
+else:
+    print ("MPS device not found.")
+
+# =======================   Ranom Seeds   ======================= #
+# Set random seed for reproducibility
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+torch.backends.cudnn.deterministic = True
+# =============================================================== #
+# ======================= NORMALIZE PARAMS ======================= #
+transform = transforms.Compose([
+    transforms.Resize((256, 256)),  # Resize images to a consistent size
+    transforms.ToTensor(),          # Convert images to tensors
+    transforms.Normalize(           # Normalize the images
+        # average values of the red, green, 
+        # and blue channels across all images in the ImageNet dataset.
+        mean=[0.485, 0.456, 0.406], 
+        # standard deviation of the red, green, and blue 
+        # channels across all images in the ImageNet dataset.
+        std=[0.229, 0.224, 0.225]   
+    )
+])
+# ======================= LOAD MAIN DATASET ======================= #
+# Download and load the Food101 dataset
+train_dataset = torchvision.datasets.Food101(
+    root='./data',                 # Directory to save the downloaded data
+    split='train',
+    download=True,                 # Download the data if not present
+    transform=transform            # Apply the transform to the data
+)
+
+test_dataset = torchvision.datasets.Food101(
+    root='./data',                 # Directory to save the downloaded data
+    split='test',
+    download=True,                 # Download the data if not present
+    transform=transform            # Apply the transform to the data
+)
+# ======================= SMALL DATASET ======================= #
+def get_labels_from_loader(loader):
+    labels = []
+    for _, label in loader:
+        labels.extend(label.tolist())
+    return labels
+
+def get_subset_with_n_classes(original_dataset, n_classes, batch_size=64):
+    # Check if the dataset is a Subset
+    if isinstance(original_dataset, Subset):
+        # Create a DataLoader to extract labels from the Subset
+        subset_loader = DataLoader(original_dataset, batch_size=batch_size, shuffle=False)
+        # Extract labels
+        targets = get_labels_from_loader(subset_loader)
+    else:
+        # Directly access targets for a non-Subset dataset
+        targets = original_dataset.targets
+
+    # Find the unique classes and select the first n
+    unique_classes = torch.unique(torch.tensor(targets))
+    selected_classes = unique_classes[:n_classes].tolist()
+
+    # Get the indices of samples belonging to the selected classes
+    selected_indices = [i for i, t in enumerate(targets) if t in selected_classes]
+
+    # Handle if the dataset is already a Subset
+    if isinstance(original_dataset, Subset):
+        # Adjust indices to map to the original dataset
+        original_indices = [original_dataset.indices[i] for i in selected_indices]
+        # Create a new Subset from the original dataset
+        subset = Subset(original_dataset.dataset, original_indices)
+    else:
+        # Create a new Subset
+        subset = Subset(original_dataset, selected_indices)
+    
+    return subset
+
+
+# Get a subset with the first n classes
+n = 5  # For example, get the first 5 classes
+subset_train = get_subset_with_n_classes(train_dataset, n)
+subset_test = get_subset_with_n_classes(test_dataset, n)
+# =======================     DATA INFO    ======================= #
+print('Train dataset length:',      len(train_dataset))
+print('Test dataset length:',       len(test_dataset))
+print('Classes:',                   train_dataset.classes)
+print('Number of classes:',         len(train_dataset.classes))
+print("===============================================")
+print('Sample image shape:',        np.shape(train_dataset[0][0]))
+# print('Sample image shape [0][0]:', train_dataset[0][0])
+print('Sample image label [0][1]:', train_dataset[0][1])
+print('Sample image class:',        train_dataset.classes[train_dataset[0][1]])
+# def display_image(dataset, index):
+#     plt.imshow(dataset[index][0])                       # Plot the image
+#     plt.title(train_dataset.classes[dataset[index][1]]) # Set the title 
+# ======================== DISPLAY IMAGE (FROM MAIN DATASET) ======================== #
+def display_image(dataset, index):
+    image, label = dataset[index]
+    image = to_pil_image(image)
+    plt.imshow(image)
+    plt.title(train_dataset.classes[label])
+
+display_image(train_dataset, 33)
+# ================ SAMPLE IMAGE FOR ALL CLASSES ================ #
+def display_each_class(dataset):
+    plt.figure(figsize=(256, 256))  # Adjust the figure size as needed
+    for idx in range(0, len(train_dataset.classes)):
+        plt.subplot(26, 4, idx+1)
+        plt.imshow(dataset[idx * 750][0])  # Indexing starts from 0
+        plt.title(dataset.classes[dataset[idx * 750][1]])
+        # plt.xticks([])
+        # plt.yticks([])
+
+    plt.tight_layout()  # Move this outside the loop
+    # plt.show()
+    plt.savefig("output.png")
+
+display_each_class(train_dataset)
+# General function to display the histogram of the images
+def list_image_paths(root_dir = "data/food-101/images", extensions=['.jpg', '.jpeg', '.png']):
+    image_paths = []
+
+    for root, dirs, files in os.walk(root_dir):
+        #write in red
+        # print('\033[91m' + root)
+        for file in files:
+            #write in blue
+            # print('\033[94m' + file)
+    
+            if any(file.lower().endswith(ext) for ext in extensions):
+                image_paths.append(os.path.join(root, file))
+                break
+            
+
+    return image_paths
+
+def display_histogram(image_paths):
+    # Load images and extract pixel values
+    images = [np.array(Image.open(image_path).convert("RGB")) for image_path in image_paths]
+    
+    # Flatten the 3D array of pixel values into a 1D array
+    pixel_values_flat = np.concatenate([image.flatten() for image in images])
+
+    # print('Total number of pixels:', len(pixel_values_flat))
+
+    # Make a histogram for the pixel values
+    plt.figure(figsize=(20, 10))
+    plt.hist(pixel_values_flat, bins=20, range=(0, 255), color='blue', edgecolor='black')
+    plt.title('Distribution of Pixel Intensities in the Dataset')
+    plt.xlabel('Pixel Value')
+    plt.ylabel('Frequency')
+    plt.show()
+
+test = list_image_paths()
+# print(len(test))
+# print(test[0:101])
+display_histogram(test)
+# =======================   CNN MODEL    ======================= #
+class SimpleCNN(nn.Module):
+    def __init__(self, num_classes):
+        super(SimpleCNN, self).__init__()
+        # Input shape: [batch_size, 3, 256, 256]
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
+        # Fully connected layer
+        self.fc1 = nn.Linear(64 * 64 * 64, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.fc3 = nn.Linear(512, num_classes)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(-1, 64 * 64 * 64)  # Flatten the tensor
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+# # Hyperparameters
+# num_epochs = 5
+# batch_size = 32
+# num_classes = 5 # ? temporary 5
+# learning_rate = 0.001
+# num_folds = 5  # Number of folds for K-fold cross-validation
+
+# # Initialize KFold for cross-validation
+# kf = KFold(n_splits=num_folds, shuffle=True, random_state=seed)
+
+# best_model = None
+# best_val_accuracy = 0.0
+
+# for fold, (train_indices, val_indices) in enumerate(kf.split(train_dataset)):
+#     print(f"Fold {fold + 1}/{num_folds}")
+
+#     # Initialize model, loss function, and optimizer
+#     model = SimpleCNN(num_classes)
+#     criterion = nn.CrossEntropyLoss()
+#     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+#     # Split the data into training and validation sets for this fold
+#     train_sampler = torch.utils.data.SubsetRandomSampler(train_indices)
+#     val_sampler = torch.utils.data.SubsetRandomSampler(val_indices)
+
+#     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
+#     val_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=val_sampler)
+
+#     for epoch in tqdm(range(num_epochs), desc="Training", unit="epoch"):
+#         # Training loop
+#         model.train()
+#         for images, labels in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch"):
+#             optimizer.zero_grad()
+#             outputs = model(images)
+#             loss = criterion(outputs, labels)
+#             loss.backward()
+#             optimizer.step()
+
+#         # Validation loop
+#         model.eval()
+#         total_correct = 0
+#         total_samples = 0
+#         with torch.no_grad():
+#             for images, labels in tqdm(val_loader, desc=f"Epoch {epoch + 1}/{num_epochs} (Validation)", unit="batch"):
+#                 outputs = model(images)
+#                 _, predicted = torch.max(outputs, 1)
+#                 total_samples += labels.size(0)
+#                 total_correct += (predicted == labels).sum().item()
+
+#         val_accuracy = total_correct / total_samples
+#         print(f"Epoch [{epoch + 1}/{num_epochs}] - Validation Accuracy: {val_accuracy:.4f}")
+
+#         # Check if this model has the best validation accuracy
+#         if val_accuracy > best_val_accuracy:
+#             best_val_accuracy = val_accuracy
+#             best_model = model.state_dict()
+
+# # After K-fold cross-validation, use the best model for testing
+# model.load_state_dict(best_model)
+# model.eval()
+
+# # Define the data loader for testing
+# test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+# # Testing loop
+# model.eval()
+# total_correct = 0
+# total_samples = 0
+# with torch.no_grad():
+#     for images, labels in test_loader:
+#         outputs = model(images)
+#         _, predicted = torch.max(outputs, 1)
+#         total_samples += labels.size(0)
+#         total_correct += (predicted == labels).sum().item()
+
+# test_accuracy = total_correct / total_samples
+# print(f"Test Accuracy: {test_accuracy:.4f}")
+# ======================= SMALL MODEL TRAINING FOR 5 CLASSES ======================= #
+# Hyperparameters
+num_epochs = 30
+batch_size = 128
+num_classes = 5 # ? temporary 5
+learning_rate = 0.001
+num_folds = 5  # Number of folds for K-fold cross-validation
+
+# Initialize KFold for cross-validation
+kf = KFold(n_splits=num_folds, shuffle=True, random_state=seed)
+
+best_model = None
+best_val_accuracy = 0.0
+
+for fold, (train_indices, val_indices) in enumerate(kf.split(subset_train)):
+    print(f"Fold {fold + 1}/{num_folds}")
+
+    # Initialize model, loss function, and optimizer
+    model = SimpleCNN(num_classes)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+    # Split the data into training and validation sets for this fold
+    train_sampler = torch.utils.data.SubsetRandomSampler(train_indices)
+    val_sampler = torch.utils.data.SubsetRandomSampler(val_indices)
+
+    train_loader = torch.utils.data.DataLoader(subset_train, batch_size=batch_size, sampler=train_sampler)
+    val_loader = torch.utils.data.DataLoader(subset_train, batch_size=batch_size, sampler=val_sampler)
+
+    for epoch in tqdm(range(num_epochs), desc="Training", unit="epoch"):
+        # Training loop
+        model.train()
+        for images, labels in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch"):
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+        # Validation loop
+        model.eval()
+        total_correct = 0
+        total_samples = 0
+        with torch.no_grad():
+            for images, labels in tqdm(val_loader, desc=f"Epoch {epoch + 1}/{num_epochs} (Validation)", unit="batch"):
+                outputs = model(images)
+                _, predicted = torch.max(outputs, 1)
+                total_samples += labels.size(0)
+                total_correct += (predicted == labels).sum().item()
+
+        val_accuracy = total_correct / total_samples
+        print(f"Epoch [{epoch + 1}/{num_epochs}] - Validation Accuracy: {val_accuracy:.4f}")
+
+        # Check if this model has the best validation accuracy
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            best_model = model.state_dict()
+
+# After K-fold cross-validation, use the best model for testing
+model.load_state_dict(best_model)
+model.eval()
+
+# Define the data loader for testing
+test_loader = torch.utils.data.DataLoader(subset_test, batch_size=batch_size, shuffle=False)
+
+# Testing loop
+model.eval()
+total_correct = 0
+total_samples = 0
+with torch.no_grad():
+    for images, labels in test_loader:
+        outputs = model(images)
+        _, predicted = torch.max(outputs, 1)
+        total_samples += labels.size(0)
+        total_correct += (predicted == labels).sum().item()
+
+test_accuracy = total_correct / total_samples
+print(f"Test Accuracy: {test_accuracy:.4f}")

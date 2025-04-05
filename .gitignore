@@ -1,0 +1,13 @@
+
+data/food-101.tar.gz
+data/.DS_Store
+data/food-101/.DS_Store
+
+*.jpg
+
+*.DS_Store
+data/food-101/meta/train.json
+data/food-101/meta/test.txt
+data/food-101/meta/test.json
+data/food-101/*
+*.pt
