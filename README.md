@@ -68,17 +68,6 @@ The project aims to classify food images efficiently using the extensive Food 10
 ### References
 *   He, K., Zhang, X., Ren, S., & Sun, J. (2015). Deep Residual Learning for Image Recognition. *arXiv (Cornell University)*. https://doi.org/10.48550/arxiv.1512.03385
 
-## Repository Structure
-
-*(You can add details about your repository's file structure here once you organize it, e.g.,)*
-```
-/data_handling # Scripts for dataset download and preprocessing
-/models        # Model definitions
-/training      # Scripts for training the models
-/api           # (If applicable) API endpoint code
-...
-```
-
 ## How to Use
 
 1.  **Clone the repository:**
@@ -86,14 +75,31 @@ The project aims to classify food images efficiently using the extensive Food 10
     git clone https://github.com/verynewusername/food-101.git
     cd food-101
     ```
+
 2.  **Set up the environment:**
-    *(Add instructions for setting up dependencies, e.g., pip install -r requirements.txt)*
-3.  **Download the dataset:**
-    *(Point to the script or command to download the Food 101 dataset automatically)*
-4.  **Train the models:**
-    *(Point to the main training script and any relevant configuration options)*
-5.  **(Optional) Run the API / Inference:**
-    *(If applicable, provide instructions on how to use a trained model for predictions)*
+    ```bash
+    pip install -r requirements.txt
+    ```
+    *(Make sure you have Jupyter installed: `pip install jupyter` if not already available)*
+
+3.  **Launch Jupyter Notebook:**
+    ```bash
+    jupyter notebook
+    ```
+
+4.  **Download the dataset:**
+    *(Run the data download cells in the notebooks or execute the dataset preparation script)*
+
+5.  **Train the models:**
+    - Open `fast_training.ipynb` for quick model training
+    - Run all cells sequentially (Cell → Run All) or execute blocks step by step
+    - Alternatively, explore other `.ipynb` files for different training approaches
+
+6.  **(Optional) Run inference:**
+    - Use the inference cells in the notebooks to test trained models
+    - Load your trained model and run prediction cells on new food images
+
+**Note:** Execute the notebook cells in order to ensure proper setup and training flow.
 
 ---
 Project by:
