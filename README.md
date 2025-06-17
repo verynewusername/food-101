@@ -103,7 +103,7 @@ The project aims to classify food images efficiently using the extensive Food 10
 
 ---
 Project by:
-*   Nihat Aksu (S4709039)
-*   Efe Görkem Şirin (S4808746)
+*   Efe Görkem Şirin
+*   Nihat Aksu
 
 University of Groningen - WBAI060-05 Machine Learning Practical (2023-24)
